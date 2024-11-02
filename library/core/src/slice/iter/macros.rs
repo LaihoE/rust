@@ -264,12 +264,18 @@ macro_rules! iterator {
                 Self: Sized,
                 F: FnMut(Self::Item) -> bool,
             {
-                while let Some(x) = self.next() {
-                    if !f(x) {
-                        return false;
+                const LANE_COUNT: usize = 8;
+                let mut chunks = self.array_chunks::<LANE_COUNT>();
+
+                for chunk in chunks.by_ref() {
+                    if !chunk.into_iter().fold(true, |acc, x| acc & f(x)){
+                        return false
                     }
                 }
-                true
+                match chunks.into_remainder() {
+                    Some(rem) => rem.fold(true, |acc, x| acc & f(x)),
+                    None => true,
+                }
             }
 
             // We override the default implementation, which uses `try_fold`,
@@ -281,12 +287,18 @@ macro_rules! iterator {
                 Self: Sized,
                 F: FnMut(Self::Item) -> bool,
             {
-                while let Some(x) = self.next() {
-                    if f(x) {
-                        return true;
+                const LANE_COUNT: usize = 8;
+                let mut chunks = self.array_chunks::<LANE_COUNT>();
+
+                for chunk in chunks.by_ref() {
+                    if chunk.into_iter().fold(false, |acc, x| acc | f(x)){
+                        return true
                     }
                 }
-                false
+                match chunks.into_remainder() {
+                    Some(rem) => rem.fold(false, |acc, x| acc | f(x)),
+                    None => false,
+                }
             }
 
             // We override the default implementation, which uses `try_fold`,
